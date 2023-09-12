@@ -141,7 +141,7 @@ EndStructure
  
  PrototypeC  pENetPacketFreeCallback(*mem);
   
- Structure ENetPacket 
+ Structure ENetPacket Align 8
    referenceCount.i; /**< internal use only */
    flags.l         ;          /**< bitwise-or of ENetPacketFlag constants */
    *data           ;           /**< allocated data for packet */
@@ -150,13 +150,13 @@ EndStructure
    *userData                           ;       /**< application private data, may be freely modified */
  EndStructure
  
- Structure ENetAcknowledgement
+ Structure ENetAcknowledgement Align 8
    acknowledgementList.ENetListNode  
    sentTime.l;
    command.i ;
  EndStructure
  
- Structure ENetOutgoingCommand
+ Structure ENetOutgoingCommand Align 8
    outgoingCommandList.ENetListNode;
    reliableSequenceNumber.u        ;
    unreliableSequenceNumber.u      ;
@@ -170,7 +170,7 @@ EndStructure
    *packet.ENetPacket              ;
  EndStructure
  
- Structure ENetIncomingCommand 
+ Structure ENetIncomingCommand Align 8
    incomingCommandList.ENetListNode;
    reliableSequenceNumber.u        ;
    unreliableSequenceNumber.u      ;
@@ -182,17 +182,17 @@ EndStructure
  EndStructure
  
  Structure in6_addr
-   l.q
    h.q
+   l.q
  EndStructure   
  
-Structure ENetAddress
+Structure ENetAddress Align 8
    host.in6_addr;
    port.u;
    sin6_scope_id.u;
 EndStructure 
 
-Structure ENetChannel 
+Structure ENetChannel Align 8
   outgoingReliableSequenceNumber.u;
   outgoingUnreliableSequenceNumber.u;
   usedReliableWindows.u             ;
@@ -203,7 +203,7 @@ Structure ENetChannel
   incomingUnreliableCommands.ENetList           ;
 EndStructure
 
-Structure ENetPeer 
+Structure ENetPeer Align 8  
   *dispatchList;
   *host.ENetHost;
   outgoingPeerID.u;
@@ -212,7 +212,7 @@ Structure ENetPeer
   outgoingSessionID.a;
   incomingSessionID.a;
   address.ENetAddress; /**< Internet address of the peer */
-  *Data              ;    /**< Application private data, may be freely modified */
+  *Data              ; /**< Application private data, may be freely modified */
   state.i              ;
   *channels          ;
   channelCount.i     ;      /**< Number of channels allocated for communication with peer */
@@ -285,7 +285,7 @@ PrototypeC ENetChecksumCallback(*buffers,bufferCount.i);
 PrototypeC ENetInterceptCallback(*host,*event);
 
 
-Structure  ENetHost 
+Structure  ENetHost Align 8
   socket.i;
   address.ENetAddress;           /**< Internet address of the host */
   incomingBandwidth.l;           /**< downstream bandwidth of the host */
@@ -324,7 +324,7 @@ Structure  ENetHost
   maximumWaitingData.i                              ;/**< the maximum aggregate amount of buffer space a peer may use waiting for packets to be delivered */
 EndStructure
 
-Structure ENetEvent 
+Structure ENetEvent Align 8
   type.i;                    ;/**< type of the event */
   *peer.ENetPeer             ;/**< peer that generated a connect, disconnect or receive event */
   channelID.a                ; /**< channel on the peer that generated the event, if appropriate */
@@ -369,6 +369,7 @@ ImportC "libenet_shared.dll.a"
   enet_host_get_received_data(*ENetHost , *data)
   enet_host_get_mtu(*ENetHost)                            
   
+  
   enet_peer_get_id(*ENetPeer )
   enet_peer_get_ip(*ENetPeer, *ip,ipLength.i)
   enet_peer_get_port(*ENetPeer )                          
@@ -386,6 +387,7 @@ ImportC "libenet_shared.dll.a"
   enet_packet_get_data(*ENetPacket )
   enet_packet_get_length(*ENetPacket )
   enet_packet_set_free_callback(*ENetPacket , *mem)
+  
   
   enet_packet_create_offset(*data,datalength.i,dataoffset.i,flags.l)
   enet_crc32(*buffer,sz.i)                              
@@ -405,7 +407,7 @@ ImportC "libenet_shared.dll.a"
   enet_host_bandwidth_limit(*ENetHost, incomminglimit.i,outgoinglimit.i)                                                          
   enet_host_bandwidth_throttle(*ENetHost )                                                                                 
   enet_host_random_seed(void)                                                                                              
-  
+    
   enet_peer_send(*ENetPeer, channelID.a, *ENetPacket)
   enet_peer_receive(*ENetPeer ,*channelID)
   enet_peer_ping(*ENetPeer )                           
@@ -447,15 +449,118 @@ EndMacro
 CompilerIf #PB_Compiler_IsMainFile 
   
   Define version 
+  
+  Structure Client
+    *host.ENetHost
+    *peer.ENetPeer
+  EndStructure
+  
+  Procedure CBPacketDestroy(*packet.ENetPacket) 
+    Debug  "free " 
+  EndProcedure   
+  
+  Procedure CBpacketCreate(*data,dataLength.i,flags.l);
+     Debug "create" 
+  EndProcedure   
+  
+  Procedure  host_server(server) 
     
-  enet_initialize()
+    Protected event.ENetEvent 
+    Protected *peer.ENetPeer 
+    Protected *address.enetaddress 
+    
+    Static ct1 
+    
+    While enet_host_service(server, @event, 2) > 0 
+        Select event\type 
+            Case #ENET_EVENT_TYPE_CONNECT
+                PrintN("A new client connected from " + Str(event\peer\address\port));
+                
+                enet_peer_set_data(event\peer,ct1);
+                ct1+1                
+            Case #ENET_EVENT_TYPE_RECEIVE
+                PrintN("A packet of length " + Str(event\packet\dataLength)) 
+                                      
+           Case #ENET_EVENT_TYPE_DISCONNECT
+                PrintN("disconnected " + Str(event\peer\Data));
+                
+                Debug enet_peer_get_data(event\peer)
+                       
+
+            Case #ENET_EVENT_TYPE_DISCONNECT_TIMEOUT
+                PrintN("timeout" + Str(event\peer))
+                            
+            
+        EndSelect 
+    Wend 
+  EndProcedure 
+  
+  OpenConsole() 
+  
+  Global CB.ENetCallbacks 
+  
+  cb\packet_destroy = @CBPacketDestroy() 
+  cb\packet_create = @CBpacketCreate() 
   
   version = enet_linked_version()
   Debug ENET_VERSION_GET_MAJOR(version)
   Debug ENET_VERSION_GET_MINOR(version)
   Debug ENET_VERSION_GET_PATCH(version)  
   
-  enet_deinitialize()
+  If enet_initialize_with_callbacks(version,@cb) = 0  
   
+   #MAX_CLIENTS = 31
+     
+   Global *server.ENetHost;
+   Global sevent.ENetEvent
+   Global Dim clients.client(#MAX_CLIENTS+1)     
+   Global address.ENetAddress ;
+   Global taddress.ENetAddress; 
+   
+   
+   address\host\h = 0 
+   address\host\l = 0  
+   
+   address\port = 7777; /* Bind the server to port 7777. */
+   
+    server = enet_host_create(@address, #MAX_CLIENTS, 2, 0, 0);
+;    
+    For i = 0 To #MAX_CLIENTS 
+        enet_address_set_host_new(@address, "127.0.0.1");
+        clients(i)\host = enet_host_create(0, 1, 2, 0, 0);
+        clients(i)\peer = enet_host_connect(clients(i)\host, @address, 2, 0);
+        If (clients(i)\peer = #Null) 
+             PrintN("coundlnt connect");
+             Break 
+        EndIf 
+    Next 
+    
+    counter = 100;
+
+    Repeat 
+        host_server(server);
+        
+        For i = 0 To #MAX_CLIENTS 
+          enet_host_service(clients(i)\host, @sevent, 0);
+        Next 
+        counter-1;
+    Until counter = 0;
+   
+    For i = 0 To #MAX_CLIENTS
+       enet_peer_disconnect_now(clients(i)\peer,0);
+       enet_host_destroy(clients(i)\host);
+    Next 
+
+    host_server(server);
+
+    enet_host_destroy(server);
+   
+    enet_deinitialize()
+    
+  EndIf    
+    
+   Input() 
+      
+    
 CompilerEndIf   
   
